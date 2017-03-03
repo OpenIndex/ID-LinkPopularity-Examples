@@ -11,7 +11,7 @@ Link-Popularity in eine Webseite.
     [in diesem Wissensartikel](https://immobiliendiskussion.de/wiki/idisk-link-popularity-php).
 -   Bei Fragen oder Unklarheiten zur Verwendung der Skripte
     [nehmen Sie bitte Kontakt mit der Moderation](https://immobiliendiskussion.de/contact)
-    der ImmobilienDiskssion auf.
+    der ImmobilienDiskussion auf.
 
 Lizenz
 ------
