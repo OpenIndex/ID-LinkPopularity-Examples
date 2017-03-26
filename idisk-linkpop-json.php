@@ -32,7 +32,7 @@
 define('LINKPOP_KEY', 'HIER-DIE-KENNUNG-IHRER-LINK-POPULARITY-EINTRAGEN');
 
 // Web-Adresse zum Abruf der Link-Popularity
-define('LINKPOP_URL', 'http://immobiliendiskussion.de/linkpopularity');
+define('LINKPOP_URL', 'https://immobiliendiskussion.de/linkpopularity');
 
 ?><!DOCTYPE html>
 <html>
