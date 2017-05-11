@@ -37,6 +37,9 @@ define('LINKPOP_TYPE', 'html_detailed');
 // Web-Adresse zum Abruf der Link-Popularity
 define('LINKPOP_URL', 'https://immobiliendiskussion.de/linkpopularity');
 
+// SSL-Zertifikat der ImmobilienDiskussion beim Abruf prüfen (erlaubt ist false, true)
+define('LINKPOP_VALIDATE_CERTIFICATE', true);
+
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -53,15 +56,59 @@ define('LINKPOP_URL', 'https://immobiliendiskussion.de/linkpopularity');
 
 <!-- Beginn der Link-Popularity -->
 <?php
-if (ini_get('allow_url_fopen')=='0' && ini_set('allow_url_fopen', '1')===false) {
+$url = LINKPOP_URL.'/'.LINKPOP_TYPE.'/'.LINKPOP_KEY;
+$content = null;
+
+// load the content via file_get_contents,
+// if allow_url_fopen is enabled in the PHP runtime
+if (ini_get('allow_url_fopen')=='1' || ini_set('allow_url_fopen', '1')!==false) {
+  $context = null;
+
+  // disable certificate checks, if it was explicitly disabled
+  // or if PHP does not support SNI (Server Name Indication)
+  if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE || !defined('OPENSSL_TLSEXT_SERVER_NAME') || !OPENSSL_TLSEXT_SERVER_NAME) {
+    $opts = array(
+      'ssl'=>array(
+        'verify_peer' => false,
+        'verify_peer_name' => false,
+      )
+    );
+    $context = stream_context_create($opts);
+  }
+
+  $content = file_get_contents($url, false, $context);
+}
+
+// alternatively load the content via cURL,
+// if it is available in the PHP runtime
+else if (function_exists('curl_init')) {
+  $curl = curl_init();
+  curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($curl, CURLOPT_URL, $url);
+  curl_setopt($curl, CURLOPT_HEADER, false);
+
+  // disable certificate checks, if it was explicitly disabled
+  if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE) {
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
+  }
+
+  $content = curl_exec($curl);
+  curl_close($curl);
+}
+
+// show an error message, if the download is not possible
+else {
   echo '<p>'
     . '<strong>ACHTUNG:</strong> '
     . 'Die PHP-Installation auf Ihrer Webseite erlaubt keinen Zugriff auf den Server der ImmobilienDiskussion. '
-    . 'Kontaktieren Sie ggf. Ihren Webspace-Provider und fragen Sie nach Aktivierung der PHP-Option <q>allow_url_fopen</q>. '
+    . 'Kontaktieren Sie ggf. Ihren Webspace-Provider und fragen Sie nach Aktivierung der PHP-Option <q>allow_url_fopen</q> oder des PHP-Moduls <q>cURL</q>. '
     . '</p>';
 }
-else {
-  echo file_get_contents(LINKPOP_URL.'/'.LINKPOP_TYPE.'/'.LINKPOP_KEY);
+
+// print out the downloaded content
+if ($content!=null) {
+  echo $content;
 }
 ?>
 <!-- Ende der Link-Popularity -->
