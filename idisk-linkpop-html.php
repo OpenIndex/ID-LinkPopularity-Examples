@@ -40,6 +40,15 @@ define('LINKPOP_URL', 'https://immobiliendiskussion.de/linkpopularity');
 // SSL-Zertifikat der ImmobilienDiskussion beim Abruf prüfen (erlaubt ist false, true)
 define('LINKPOP_VALIDATE_CERTIFICATE', true);
 
+// Pfad zum Verzeichnis zur Speicherung temporärer Dateien. Wenn der Wert leer ist,
+// wird das Verzeichnis automatisch aus den PHP-Einstellungen ermittelt.
+// Es müssen Schreibrechte für das PHP-Skript auf dem Verzeichnis vorliegen.
+define('LINKPOP_TEMP_DIR', '');
+
+// Dauer in Sekunden, wie lange eine zwischengespeicherte Linkliste vorgehalten
+// wird. (86400 Sekunden = 1 Tag)
+define('LINKPOP_TEMP_LIFETIME', 86400);
+
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -59,51 +68,102 @@ define('LINKPOP_VALIDATE_CERTIFICATE', true);
 $url = LINKPOP_URL.'/'.LINKPOP_TYPE.'/'.LINKPOP_KEY;
 $content = null;
 
-// load the content via file_get_contents,
-// if allow_url_fopen is enabled in the PHP runtime
-if (ini_get('allow_url_fopen')=='1' || ini_set('allow_url_fopen', '1')!==false) {
-  $context = null;
-
-  // disable certificate checks, if it was explicitly disabled
-  // or if PHP does not support SNI (Server Name Indication)
-  if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE || !defined('OPENSSL_TLSEXT_SERVER_NAME') || !OPENSSL_TLSEXT_SERVER_NAME) {
-    $opts = array(
-      'ssl'=>array(
-        'verify_peer' => false,
-        'verify_peer_name' => false,
-      )
-    );
-    $context = stream_context_create($opts);
+// detect path to temporary directory
+$tempDir = null;
+if (defined('LINKPOP_TEMP_DIR') && LINKPOP_TEMP_DIR!='') {
+  $tempDir = LINKPOP_TEMP_DIR;
+}
+if ($tempDir==null || !is_dir($tempDir) || !is_writable($tempDir)) {
+  $tempDir = ini_get('upload_tmp_dir');
+  if ($tempDir==='' || $tempDir===false) {
+    $tempDir = null;
   }
-
-  $content = file_get_contents($url, false, $context);
+}
+if ($tempDir==null || !is_dir($tempDir) || !is_writable($tempDir)) {
+  $tempDir = sys_get_temp_dir();
 }
 
-// alternatively load the content via cURL,
-// if it is available in the PHP runtime
-else if (function_exists('curl_init')) {
-  $curl = curl_init();
-  curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-  curl_setopt($curl, CURLOPT_URL, $url);
-  curl_setopt($curl, CURLOPT_HEADER, false);
-
-  // disable certificate checks, if it was explicitly disabled
-  if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE) {
-    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
-  }
-
-  $content = curl_exec($curl);
-  curl_close($curl);
+// create path to temporary file
+$tempFile = null;
+if ($tempDir!=null && is_dir($tempDir) && is_writable($tempDir)) {
+  $tempFile = $tempDir . DIRECTORY_SEPARATOR . 'idisk-linkpop-' . md5( $url ) . '.txt';
 }
 
-// show an error message, if the download is not possible
+// load content from temporary file
+$tempContent = null;
+if ($tempFile!=null && is_file($tempFile)) {
+  $tempContent = file_get_contents($tempFile);
+}
+
+// use content from temporary file, if its maximal age is not exceeded
+$minAge = time() - LINKPOP_TEMP_LIFETIME;
+if ($tempFile!=null && is_file($tempFile) && filemtime($tempFile)>$minAge) {
+  $content =& $tempContent;
+}
+
+// download content otherwise
 else {
-  echo '<p>'
-    . '<strong>ACHTUNG:</strong> '
-    . 'Die PHP-Installation auf Ihrer Webseite erlaubt keinen Zugriff auf den Server der ImmobilienDiskussion. '
-    . 'Kontaktieren Sie ggf. Ihren Webspace-Provider und fragen Sie nach Aktivierung der PHP-Option <q>allow_url_fopen</q> oder des PHP-Moduls <q>cURL</q>. '
-    . '</p>';
+
+  // load the content via file_get_contents,
+  // if allow_url_fopen is enabled in the PHP runtime
+  if (ini_get('allow_url_fopen')=='1' || ini_set('allow_url_fopen', '1')!==false) {
+    $context = null;
+
+    // disable certificate checks, if it was explicitly disabled
+    // or if PHP does not support SNI (Server Name Indication)
+    if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE || !defined('OPENSSL_TLSEXT_SERVER_NAME') || !OPENSSL_TLSEXT_SERVER_NAME) {
+      $opts = array(
+        'ssl'=>array(
+          'verify_peer' => false,
+          'verify_peer_name' => false,
+        )
+      );
+      $context = stream_context_create($opts);
+    }
+
+    $content = file_get_contents($url, false, $context);
+  }
+
+  // alternatively load the content via cURL,
+  // if it is available in the PHP runtime
+  else if (function_exists('curl_init')) {
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_HEADER, false);
+
+    // disable certificate checks, if it was explicitly disabled
+    if (!defined('LINKPOP_VALIDATE_CERTIFICATE') || !LINKPOP_VALIDATE_CERTIFICATE) {
+      curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+      curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
+    }
+
+    $content = curl_exec($curl);
+    curl_close($curl);
+  }
+
+  // show an error message, if the download is not possible
+  else {
+    echo '<p>'
+      . '<strong>ACHTUNG:</strong> '
+      . 'Die PHP-Installation auf Ihrer Webseite erlaubt keinen Zugriff auf den Server der ImmobilienDiskussion. '
+      . 'Kontaktieren Sie ggf. Ihren Webspace-Provider und fragen Sie nach Aktivierung der PHP-Option <q>allow_url_fopen</q> oder des PHP-Moduls <q>cURL</q>. '
+      . '</p>';
+  }
+
+  if ($content===false || $content=='') {
+    $content = null;
+  }
+
+  // write downloaded content into the temporary file
+  if ($content!=null && $tempFile!=null) {
+    file_put_contents($tempFile, $content);
+  }
+
+  // use temporary content, in case the download failed
+  if ($content==null && $tempContent!=null) {
+    $content =& $tempContent;
+  }
 }
 
 // print out the downloaded content
